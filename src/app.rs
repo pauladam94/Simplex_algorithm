@@ -1,116 +1,220 @@
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
-    // Example stuff:
-    label: String,
+use crate::constraint::Constraints;
+use crate::linear_function::LinearFunction;
+use crate::{Simplex, SimplexError};
+use egui::FontFamily::Proportional;
+use egui::FontId;
+use egui::TextStyle::{Body, Button, Heading, Monospace, Small};
+use egui::{Color32, Style};
+use graph_renderer::Graph;
 
-    // this how you opt-out of serialization of a member
-    #[serde(skip)]
-    value: f32,
+pub struct App {
+    maximize: bool,
+
+    function_input: String,
+
+    constraints_input: String,
+
+    simplex: Option<Result<Simplex, SimplexError>>,
+    show_simplex: bool,
+
+    graph: Option<Graph>,
+    show_graph: bool,
+    graph_stroke_line: egui::Stroke,
+    graph_stroke_node: egui::Stroke,
 }
 
-impl Default for TemplateApp {
+impl Default for App {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            maximize: true,
+            function_input: String::from("x + 6y + 13z"),
+            constraints_input: String::from(
+                "\
+        x <= 200\n\
+        y <= 300\n\
+        x + y + z <= 400\n\
+        y + 3z <= 600\n
+                    ",
+            ),
+            simplex: None,
+            show_simplex: false,
+
+            graph: None,
+            show_graph: true,
+            graph_stroke_line: egui::Stroke::new(0.5, egui::Color32::GREEN),
+            graph_stroke_node: egui::Stroke::new(0.5, egui::Color32::WHITE),
         }
     }
 }
 
-impl TemplateApp {
+impl App {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
-
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
-
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Default::default()
     }
 }
 
-impl eframe::App for TemplateApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
+impl eframe::App for App {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { label, value } = self;
+        let Self {
+            maximize,
 
-        // Examples of how to create different panels and windows.
-        // Pick whichever suits you.
-        // Tip: a good default choice is to just keep the `CentralPanel`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
+            function_input,
 
-        #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        _frame.close();
-                    }
-                });
-            });
-        });
+            constraints_input,
+
+            simplex,
+            show_simplex,
+
+            graph,
+            show_graph,
+            graph_stroke_line,
+            graph_stroke_node,
+        } = self;
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
-
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
-            });
-
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
+            if ui.button("Rotate graph").clicked() || ui.input(|i| i.key_pressed(egui::Key::R)) {
+                if let Some(real_graph) = graph {
+                    real_graph.rotate(10.0);
+                }
             }
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
-                });
-            });
-        });
+            ui.checkbox(show_graph, "Show graph");
 
+            if let Some(real_graph) = graph {
+                ui.label(format!("{real_graph}"));
+            }
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
+            if *show_graph {
+                if let Some(real_graph) = graph {
+                    real_graph.draw(ui, *graph_stroke_line, *graph_stroke_node)
+                }
+            }
         });
 
-        if false {
-            egui::Window::new("Window").show(ctx, |ui| {
-                ui.label("Windows can be moved by dragging them.");
-                ui.label("They are automatically sized based on contents.");
-                ui.label("You can turn on resizing and scrolling if you like.");
-                ui.label("You would normally choose either panels OR windows.");
+        // Change font sizes
+        let mut style = (*ctx.style()).clone();
+        style.text_styles = [
+            (Heading, FontId::new(30.0, Proportional)),
+            (Body, FontId::new(24.0, Proportional)),
+            (Monospace, FontId::new(14.0, Proportional)),
+            (Button, FontId::new(14.0, Proportional)),
+            (Small, FontId::new(10.0, Proportional)),
+        ]
+        .into();
+        ctx.set_style(style);
+
+        egui::Area::new(egui::Id::new("Linear Program"))
+            .default_pos(egui::pos2(32f32, 512f32))
+            .show(ctx, |ui| {
+                egui::Frame::window(&Style::default())
+                    .fill(Color32::BLACK)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            ui.heading("Linear Program");
+                            ui.horizontal(|ui| {
+                                egui::ComboBox::from_label("")
+                                    .selected_text(
+                                        (if *maximize { "MAX" } else { "MIN" }).to_string(),
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(maximize, true, "MAX");
+                                        ui.selectable_value(maximize, false, "MIN");
+                                    });
+                                ui.text_edit_singleline(function_input);
+                            });
+                            ui.text_edit_multiline(constraints_input);
+
+                            if ui.add(egui::Button::new("COMPILE")).clicked() {
+                                // Parse constraints
+                                let constraints = Constraints::compile(constraints_input).unwrap();
+                                // Parse linear function
+                                let function =
+                                    function_input.parse().unwrap_or(LinearFunction::zero());
+
+                                // Create simplex
+                                *simplex = Some(constraints.maximize(&if *maximize {
+                                    function
+                                } else {
+                                    -function
+                                }));
+
+                                // create graph
+                                if let Some(Ok(simplex)) = simplex {
+                                    let every_points = simplex.every_points();
+                                    *graph = Some(Graph::new(
+                                        every_points.clone(),
+                                        // no adjacencies for anyone
+                                        vec![vec![]; every_points.len()],
+                                    ));
+                                    if let Some(real_graph) = graph {
+                                        real_graph.add_every_edge();
+                                        real_graph.center_window(ui)
+                                    }
+                                }
+                                // add every node
+
+                                // Show graph
+                                *show_simplex = true;
+
+                                // Draw simplex
+                                // self.simplex.draw();
+                            }
+                        });
+                    })
             });
-        }
+
+        egui::Area::new(egui::Id::new("State"))
+            .default_pos(egui::pos2(512f32, 512f32))
+            .show(ctx, |ui| {
+                egui::Frame::window(&Style::default())
+                    .fill(Color32::BLACK)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| match &self.simplex {
+                            Some(Ok(simplex)) => {
+                                ui.heading("Values");
+                                let values = simplex.current_values();
+                                ui.label(values.iter().fold(String::new(), |acc, (v, c)| {
+                                    format!("{acc}{v} = {c}\n")
+                                }));
+
+                                ui.heading("State");
+                                let current_state = simplex.current_state();
+                                ui.colored_label(
+                                    Color32::RED,
+                                    format!("max {}", current_state.linear_function),
+                                );
+                                ui.label(current_state.constraints.to_string());
+                            }
+                            Some(Err(SimplexError::Unbounded)) => {
+                                ui.colored_label(Color32::RED, "This program is unbounded");
+                            }
+                            None => {
+                                ui.label("Press RUN to start the algorithm");
+                            }
+                            _ => {
+                                ui.label("How did we get there ?");
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            // Previous button
+                            if ui.add(egui::Button::new("PREVIOUS")).clicked() {
+                                if let Some(Ok(simplex)) = &mut self.simplex {
+                                    simplex.previous_step();
+                                }
+                            }
+                            // Next button
+                            if ui.add(egui::Button::new("NEXT")).clicked() {
+                                if let Some(Ok(simplex)) = &mut self.simplex {
+                                    simplex.next_step(true);
+                                }
+                            }
+                        })
+                    })
+            });
     }
 }
