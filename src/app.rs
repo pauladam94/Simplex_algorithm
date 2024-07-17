@@ -15,7 +15,6 @@ pub struct App {
     constraints_input: String,
 
     simplex: Option<Result<Simplex, SimplexError>>,
-    show_simplex: bool,
 
     graph: Option<Graph>,
     show_graph: bool,
@@ -37,7 +36,6 @@ impl Default for App {
                     ",
             ),
             simplex: None,
-            show_simplex: false,
 
             graph: None,
             show_graph: true,
@@ -66,8 +64,6 @@ impl eframe::App for App {
             constraints_input,
 
             simplex,
-            show_simplex,
-
             graph,
             show_graph,
             graph_stroke_line,
@@ -143,22 +139,22 @@ impl eframe::App for App {
                                 }));
 
                                 // create graph
-                                if let Some(Ok(simplex)) = simplex {
-                                    let every_points = simplex.every_points();
-                                    *graph = Some(Graph::new(
-                                        every_points.clone(),
-                                        // no adjacencies for anyone
-                                        vec![vec![]; every_points.len()],
-                                    ));
-                                    if let Some(real_graph) = graph {
-                                        real_graph.add_every_edge();
-                                        real_graph.center_window(ui)
-                                    }
-                                }
+                                // if let Some(Ok(simplex)) = simplex {
+                                //     let every_points = simplex.every_points();
+                                //     *graph = Some(Graph::new(
+                                //         every_points.clone(),
+                                //         // no adjacencies for anyone
+                                //         vec![vec![]; every_points.len()],
+                                //     ));
+                                //     if let Some(real_graph) = graph {
+                                //         real_graph.add_every_edge();
+                                //         real_graph.center_window(ui)
+                                //     }
+                                // }
                                 // add every node
 
                                 // Show graph
-                                *show_simplex = true;
+                                // *show_simplex = true;
 
                                 // Draw simplex
                                 // self.simplex.draw();
@@ -210,7 +206,10 @@ impl eframe::App for App {
                             // Next button
                             if ui.add(egui::Button::new("NEXT")).clicked() {
                                 if let Some(Ok(simplex)) = &mut self.simplex {
-                                    simplex.next_step(true);
+                                    match simplex.next_step(true) {
+                                        Ok(()) => {}
+                                        Err(_) => {}
+                                    };
                                 }
                             }
                         })
